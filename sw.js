@@ -1,6 +1,5 @@
-
-self.addEventListener('install', function(event) {
-  event.waitUntil(
+self.addEventListener('install', function(e) {
+  e.waitUntil(
     caches.open('ponto-facil-cache').then(function(cache) {
       return cache.addAll([
         './',
@@ -13,10 +12,10 @@ self.addEventListener('install', function(event) {
   );
 });
 
-self.addEventListener('fetch', function(event) {
-  event.respondWith(
-    caches.match(event.request).then(function(response) {
-      return response || fetch(event.request);
+self.addEventListener('fetch', function(e) {
+  e.respondWith(
+    caches.match(e.request).then(function(response) {
+      return response || fetch(e.request);
     })
   );
 });
