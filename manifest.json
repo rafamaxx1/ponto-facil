@@ -1,10 +1,11 @@
 {
-  "name": "Ponto F\u00e1cil",
-  "short_name": "PontoF\u00e1cil",
-  "start_url": "./index.html",
+  "name": "Ponto Fácil",
+  "short_name": "PontoFácil",
+  "start_url": ".",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#28a745",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "icon-192.png",
