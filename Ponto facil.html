@@ -10,7 +10,7 @@
     body { font-family: Arial, sans-serif; background: #f2f2f2; padding: 20px; }
     .container { background: white; padding: 20px; max-width: 400px; margin: auto; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
     h2 { text-align: center; color: #2d89ef; }
-    label, select, button { display: block; width: 100%; margin-top: 15px; }
+    label, select, input, button { display: block; width: 100%; margin-top: 15px; }
     button { padding: 10px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; }
     video, canvas { display: none; }
   </style>
@@ -19,13 +19,21 @@
   <div class="container">
     <h2>Ponto Fácil</h2>
     <label for="nome">Selecione seu nome:</label>
-    <select id="nome">
+    <select id="nome" onchange="checarAdmin()">
       <option value="">-- Escolha --</option>
       <option>Andrey Vinicius</option>
       <option>Niraldo Inacio</option>
       <option>Gustavo Jose Nunes</option>
       <option>Rafael Gomes Teixeira</option>
     </select>
+
+    <div id="adminControls" style="display:none">
+      <label for="latManual">Latitude permitida:</label>
+      <input type="text" id="latManual" placeholder="Latitude manual">
+      <label for="lonManual">Longitude permitida:</label>
+      <input type="text" id="lonManual" placeholder="Longitude manual">
+      <button onclick="salvarLocalizacaoPadrao()">Salvar Localização</button>
+    </div>
 
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
@@ -35,9 +43,32 @@
   </div>
 
   <script>
-    const BASE_LAT = -22.912;
-    const BASE_LON = -43.230;
+    let BASE_LAT = -22.912;
+    let BASE_LON = -43.230;
     const RAIO_METROS = 200;
+    const ADMINS = ["Rafael Gomes Teixeira"];
+
+    function checarAdmin() {
+      const nome = document.getElementById('nome').value;
+      const adminControls = document.getElementById('adminControls');
+      if (ADMINS.includes(nome)) {
+        adminControls.style.display = 'block';
+      } else {
+        adminControls.style.display = 'none';
+      }
+    }
+
+    function salvarLocalizacaoPadrao() {
+      const lat = parseFloat(document.getElementById('latManual').value);
+      const lon = parseFloat(document.getElementById('lonManual').value);
+      if (!isNaN(lat) && !isNaN(lon)) {
+        BASE_LAT = lat;
+        BASE_LON = lon;
+        alert("Localização padrão atualizada com sucesso!");
+      } else {
+        alert("Por favor, insira valores válidos para latitude e longitude.");
+      }
+    }
 
     function calcularDistancia(lat1, lon1, lat2, lon2) {
       const R = 6371000;
@@ -51,11 +82,13 @@
     }
 
     function definirTipoPonto(horaAtual) {
-      const [hora, minuto] = horaAtual.split(":".map(Number));
+      const [hora, minuto] = horaAtual.split(":").map(Number);
       const minutosTotais = hora * 60 + minuto;
 
-      if (minutosTotais <= 480) return "Entrada"; // até 08:00
-      if (minutosTotais <= 1020) return "Saída"; // até 17:00
+      if (minutosTotais <= 480) return "Entrada";
+      if (minutosTotais <= 720) return "Saída para Almoço";
+      if (minutosTotais <= 1020) return "Retorno do Almoço";
+      if (minutosTotais <= 1020) return "Saída";
       if (minutosTotais <= 1021) return "Início Extra";
       return "Fim Extra";
     }
@@ -80,9 +113,16 @@
       if (!nome) return alert('Por favor, selecione seu nome.');
 
       status.innerText = 'Capturando localização...';
-      navigator.geolocation.getCurrentPosition(async (position) => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
+
+      const obterLocalizacao = new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          pos => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+          err => reject(err)
+        );
+      });
+
+      try {
+        const { lat, lon } = await obterLocalizacao;
         const distancia = calcularDistancia(lat, lon, BASE_LAT, BASE_LON);
         if (distancia > RAIO_METROS) {
           status.innerText = '❌ Fora da área permitida para bater ponto.';
@@ -93,7 +133,6 @@
         const dataFormatada = agora.toLocaleDateString('pt-BR');
         const hora = agora.toLocaleTimeString('pt-BR', { hour12: false });
         const tipoPonto = definirTipoPonto(hora);
-
         const fotoBase64 = await capturarFoto();
 
         const payload = {
@@ -107,21 +146,17 @@
 
         status.innerText = 'Enviando para planilha...';
         const scriptURL = 'https://script.google.com/macros/s/AKfycby0HdpWyRxPehX-ww4RFayyUgSZXe5d-dr29_yh_PQHv26uKFXavkLV0M2UAp_MsIy8/exec';
-        try {
-          await fetch(scriptURL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          status.innerText = '✅ Ponto registrado com sucesso!';
-        } catch (err) {
-          console.error(err);
-          status.innerText = '❌ Erro ao registrar o ponto.';
-        }
-      }, () => {
-        status.innerText = '❌ Erro ao capturar localização';
-      });
+        await fetch(scriptURL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        status.innerText = '✅ Ponto registrado com sucesso!';
+      } catch (err) {
+        console.error(err);
+        status.innerText = '❌ Erro ao registrar o ponto ou obter localização';
+      }
     }
   </script>
 
