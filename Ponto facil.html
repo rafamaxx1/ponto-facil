@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ponto Fácil</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#28a745" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #f2f2f2; padding: 20px; }
+    .container { background: white; padding: 20px; max-width: 400px; margin: auto; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    h2 { text-align: center; color: #2d89ef; }
+    label, select, button { display: block; width: 100%; margin-top: 15px; }
+    button { padding: 10px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; }
+    video, canvas { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Ponto Fácil</h2>
+    <label for="nome">Selecione seu nome:</label>
+    <select id="nome">
+      <option value="">-- Escolha --</option>
+      <option>Andrey Vinicius</option>
+      <option>Niraldo Inacio</option>
+      <option>Gustavo Jose Nunes</option>
+      <option>Rafael Gomes Teixeira</option>
+    </select>
+
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <button onclick="baterPonto()">Bater Ponto</button>
+
+    <p id="status"></p>
+  </div>
+
+  <script>
+    const BASE_LAT = -22.912;
+    const BASE_LON = -43.230;
+    const RAIO_METROS = 200;
+
+    function calcularDistancia(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function definirTipoPonto(horaAtual) {
+      const [hora, minuto] = horaAtual.split(":".map(Number));
+      const minutosTotais = hora * 60 + minuto;
+
+      if (minutosTotais <= 480) return "Entrada"; // até 08:00
+      if (minutosTotais <= 1020) return "Saída"; // até 17:00
+      if (minutosTotais <= 1021) return "Início Extra";
+      return "Fim Extra";
+    }
+
+    async function capturarFoto() {
+      const video = document.getElementById('video');
+      const canvas = document.getElementById('canvas');
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      const base64 = canvas.toDataURL('image/png');
+      stream.getTracks().forEach(track => track.stop());
+      return base64;
+    }
+
+    async function baterPonto() {
+      const nome = document.getElementById('nome').value;
+      const status = document.getElementById('status');
+      if (!nome) return alert('Por favor, selecione seu nome.');
+
+      status.innerText = 'Capturando localização...';
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const distancia = calcularDistancia(lat, lon, BASE_LAT, BASE_LON);
+        if (distancia > RAIO_METROS) {
+          status.innerText = '❌ Fora da área permitida para bater ponto.';
+          return;
+        }
+
+        const agora = new Date();
+        const dataFormatada = agora.toLocaleDateString('pt-BR');
+        const hora = agora.toLocaleTimeString('pt-BR', { hour12: false });
+        const tipoPonto = definirTipoPonto(hora);
+
+        const fotoBase64 = await capturarFoto();
+
+        const payload = {
+          nome,
+          data: dataFormatada,
+          hora,
+          tipoPonto,
+          localizacao: `${lat}, ${lon}`,
+          foto: fotoBase64
+        };
+
+        status.innerText = 'Enviando para planilha...';
+        const scriptURL = 'https://script.google.com/macros/s/AKfycby0HdpWyRxPehX-ww4RFayyUgSZXe5d-dr29_yh_PQHv26uKFXavkLV0M2UAp_MsIy8/exec';
+        try {
+          await fetch(scriptURL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          status.innerText = '✅ Ponto registrado com sucesso!';
+        } catch (err) {
+          console.error(err);
+          status.innerText = '❌ Erro ao registrar o ponto.';
+        }
+      }, () => {
+        status.innerText = '❌ Erro ao capturar localização';
+      });
+    }
+  </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').then(() => {
+        console.log('Service Worker registrado com sucesso!');
+      });
+    }
+  </script>
+</body>
+</html>
